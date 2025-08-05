@@ -216,7 +216,9 @@ load_assistant/
 │   └── requirements.txt     # Dashboard dependencies
 ├── tests/                    # Test suite
 │   └── unit/
-│       └── test_loads.py    # Load endpoint tests
+│       ├── test_loads.py      
+        └── test_negotations.py
+
 ├── docker-compose.yml       # Multi-container setup
 ├── Dockerfile              # API container
 ├── init.sql               # Database initialization
