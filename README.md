@@ -22,34 +22,6 @@ cd load_assistant
 make install
 ```
 
-### Environment Setup
-
-Create a `.env` file based on `env.template`:
-
-```env
-# API Authentication
-AUTH_HEADER_KEY=X-API-Key
-AUTH_API_KEY=my-secret-api-key-123
-
-# External APIs
-FMCSA_API_KEY=your-fmcsa-api-key
-
-# CORS
-BACKEND_CORS_ORIGINS=http://localhost:3000,http://localhost:8080
-
-# Project Config
-PROJECT_NAME=Load Assistant API
-API_V1_STR=/api/v1
-ENVIRONMENT=development
-TESTING=false
-
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/loads_db
-
-# Server
-HOST=0.0.0.0
-PORT=8000
-```
 
 ## 🐳 Docker Setup (Recommended)
 
