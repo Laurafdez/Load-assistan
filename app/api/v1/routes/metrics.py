@@ -1,44 +1,32 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
+
 from app.database_engine.session import get_db
-from app.models.call_summary import CallSummary
-from app.models.load import Load
-from app.schemas.metrics import MetricsResponse, SentimentSummary
+from app.schemas.metrics import MetricsResponse
+from app.business.metrics import calculate_metrics
 
-router = APIRouter()
+router = APIRouter(tags=["Metrics"])
 
 
-@router.get("/metrics", response_model=MetricsResponse, tags=["Metrics"])
-def get_metrics(db: Session = Depends(get_db)):
-    total_loads = db.query(Load).count()
-    total_calls = db.query(CallSummary).count()
-    accepted = db.query(CallSummary).filter(CallSummary.outcome == "accepted").count()
-    rejected = db.query(CallSummary).filter(CallSummary.outcome == "rejected").count()
-    pending = total_calls - accepted - rejected
+@router.get(
+    "/metrics",
+    response_model=MetricsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get system metrics",
+    description=(
+        "Returns detailed KPI metrics about load availability, call summaries, "
+        "negotiation outcomes, sentiment trends, and user satisfaction."
+    ),
+    response_description="Metrics data successfully retrieved.",
+)
+def get_metrics(db: Session = Depends(get_db)) -> MetricsResponse:
+    """
+    Retrieve key performance indicators and analytics on calls and loads.
 
-    prices = (
-        db.query(CallSummary.agreed_price).filter(CallSummary.agreed_price > 0).all()
-    )
-    avg_price = round(sum(p[0] for p in prices) / len(prices), 2) if prices else 0
-
-    sentiment_summary = SentimentSummary(
-        positive=db.query(CallSummary)
-        .filter(CallSummary.sentiment == "positive")
-        .count(),
-        neutral=db.query(CallSummary)
-        .filter(CallSummary.sentiment == "neutral")
-        .count(),
-        negative=db.query(CallSummary)
-        .filter(CallSummary.sentiment == "negative")
-        .count(),
-    )
-
-    return MetricsResponse(
-        total_loads=total_loads,
-        total_calls=total_calls,
-        accepted=accepted,
-        rejected=rejected,
-        pending=pending,
-        avg_agreed_price=avg_price,
-        sentiment_summary=sentiment_summary,
-    )
+    This includes:
+    - Total loads
+    - Total and categorized call outcomes
+    - Average prices, attempts, durations
+    - Sentiment and satisfaction breakdowns
+    """
+    return calculate_metrics(db)
