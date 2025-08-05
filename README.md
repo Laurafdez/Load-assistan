@@ -117,8 +117,8 @@ make run-ngrok          # Start server + ngrok tunnel
 
 ### Core Load Management
 - `GET /api/v1/health` - API health status
-- `GET /api/v1/loads` - List available loads with filtering
-- `POST /api/v1/loads/search` - Advanced load search
+- `GET /api/v1/loads` - List available loads 
+
 
 ### Call Analytics
 - `GET /api/v1/call-summary` - Retrieve all call summaries

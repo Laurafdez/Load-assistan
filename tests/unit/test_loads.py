@@ -1,150 +1,179 @@
-import pytest
-from fastapi.testclient import TestClient
 from datetime import datetime
+from unittest.mock import Mock, patch
+from sqlalchemy.orm import Session
 
-from app.main import app
-from app.schemas.load import LoadBase
-from app.core.config import settings
-
-# FastAPI test client
-client = TestClient(app)
-
-# Required header with valid API key
-headers = {"X-API-Key": settings.AUTH_API_KEY}
+from app.business.load import (
+    get_best_load,
+    prioritize_loads,
+)
+from app.schemas.load import LoadFilter
 
 
-@pytest.fixture
-def mock_load_data():
-    """
-    Returns a sample list of load records with various urgency levels and delivery times.
-    """
-    return [
-        LoadBase(
-            load_id="L001",
-            origin="Chicago",
-            destination="Dallas",
-            pickup_datetime=datetime(2025, 8, 4, 10, 0),
-            delivery_datetime=datetime(2025, 8, 7, 8, 0),
-            equipment_type="Dry Van",
-            loadboard_rate=1150.0,
-            notes="Normal load",
-            weight=14000.0,
-            commodity_type="Clothing",
-            num_of_pieces=12,
-            miles=960.0,
-            dimensions="40x48x60",
-        ),
-        LoadBase(
-            load_id="L002",
-            origin="Chicago",
-            destination="Dallas",
-            pickup_datetime=datetime(2025, 8, 4, 11, 0),
-            delivery_datetime=datetime(2025, 8, 5, 12, 0),
-            equipment_type="Dry Van",
-            loadboard_rate=1200.0,
-            notes="Urgent - ASAP",
-            weight=15000.0,
-            commodity_type="Electronics",
-            num_of_pieces=10,
-            miles=980.0,
-            dimensions="40x48x60",
-        ),
-        LoadBase(
-            load_id="L003",
-            origin="Chicago",
-            destination="Dallas",
-            pickup_datetime=datetime(2025, 8, 4, 9, 0),
-            delivery_datetime=datetime(2025, 8, 6, 16, 0),
-            equipment_type="Dry Van",
-            loadboard_rate=1100.0,
-            notes="",
-            weight=13000.0,
-            commodity_type="Furniture",
-            num_of_pieces=15,
-            miles=1000.0,
-            dimensions="40x48x72",
-        ),
-    ]
+class TestGetBestLoad:
+    """Test suite for get_best_load function"""
+
+    @patch("app.business.load.filter_loads_from_db")
+    @patch("app.business.load.prioritize_loads")
+    @patch("app.business.load.enrich_with_pricing")
+    def test_get_best_load_strict_filters_success(
+        self, mock_enrich, mock_prioritize, mock_filter
+    ):
+        """Test successful load retrieval with strict filters"""
+        # Arrange
+        mock_db = Mock(spec=Session)
+        filters = LoadFilter(
+            origin_city="Chicago", destination_city="Dallas", equipment_type="dry_van"
+        )
+
+        mock_load = Mock()
+        mock_load.id = 1
+        mock_filter.return_value = [mock_load]
+        mock_prioritize.return_value = [mock_load]
+
+        # Create a simple mock response instead of LoadResponse instance
+        expected_response = Mock()
+        expected_response.id = 1
+        expected_response.first_offer = 2500
+        expected_response.max_rate = 3000
+        expected_response.rate_per_mile = 2.5
+        mock_enrich.return_value = expected_response
+
+        # Act
+        result = get_best_load(mock_db, filters)
+
+        # Assert
+        assert result == expected_response
+        mock_filter.assert_called_once_with(mock_db, filters)
+        mock_prioritize.assert_called_once_with([mock_load])
+        mock_enrich.assert_called_once_with(mock_load)
+
+    @patch("app.business.load.filter_loads_from_db")
+    @patch("app.core.config.constants")
+    def test_get_best_load_fallback_to_relaxed_filters(
+        self, mock_constants, mock_filter
+    ):
+        """Test fallback to relaxed filters when strict filters return no results"""
+        # Arrange
+        mock_db = Mock(spec=Session)
+        filters = LoadFilter(
+            origin_city="Chicago", destination_city="Dallas", equipment_type="dry_van"
+        )
+
+        mock_constants.RELAXED_FILTER_FIELDS = {
+            "miles": None,
+            "delivery_datetime": None,
+        }
+
+        # First call returns empty, second call returns results
+        mock_load = Mock()
+        mock_filter.side_effect = [[], [mock_load]]
+
+        with patch("app.business.load.prioritize_loads") as mock_prioritize, patch(
+            "app.business.load.enrich_with_pricing"
+        ) as mock_enrich:
+            mock_prioritize.return_value = [mock_load]
+            mock_enrich.return_value = Mock()
+
+            # Act
+            result = get_best_load(mock_db, filters)
+
+            # Assert
+            assert result is not None
+            assert mock_filter.call_count == 2
+            # First call with original filters
+            mock_filter.assert_any_call(mock_db, filters)
+            # Second call should be with relaxed filters
+
+    @patch("app.business.load.filter_loads_from_db")
+    def test_get_best_load_no_results(self, mock_filter):
+        """Test when no loads are found even with relaxed filters"""
+        # Arrange
+        mock_db = Mock(spec=Session)
+        filters = LoadFilter(origin_city="NonExistentCity")
+
+        # Both strict and relaxed filters return empty
+        mock_filter.return_value = []
+
+        # Act
+        result = get_best_load(mock_db, filters)
+
+        # Assert
+        assert result is None
 
 
-def test_prioritized_loads_on_exact_match(monkeypatch, mock_load_data):
-    """
-    If the API returns multiple loads from strict filters,
-    they should be ordered by urgency and then by delivery time.
-    """
+class TestPrioritizeLoads:
+    """Test suite for prioritize_loads function"""
 
-    def mock_filter_loads_from_db(db, filters):
-        return mock_load_data
+    def test_prioritize_loads_urgent_first(self):
+        """Test that urgent loads are prioritized first"""
+        # Arrange
+        regular_load = Mock()
+        regular_load.notes = "Standard delivery"
+        regular_load.delivery_datetime = datetime(2025, 8, 10, 12, 0)
 
-    monkeypatch.setattr(
-        "app.api.v1.routes.load.filter_loads_from_db", mock_filter_loads_from_db
-    )
+        urgent_load = Mock()
+        urgent_load.notes = "URGENT delivery needed"
+        urgent_load.delivery_datetime = datetime(
+            2025, 8, 12, 12, 0
+        )  # Later date but urgent
 
-    response = client.get(
-        "/api/v1/loads",
-        params={"origin": "Chicago", "destination": "Dallas"},
-        headers=headers,
-    )
+        loads = [regular_load, urgent_load]
 
-    assert response.status_code == 200
-    loads = response.json()
-    assert len(loads) == 3
+        with patch("app.core.config.constants") as mock_constants:
+            mock_constants.URGENT_KEYWORD = "urgent"
+            mock_constants.FALLBACK_DELIVERY_DATETIME = datetime(2099, 12, 31)
 
-    # First should be the urgent one
-    assert "urgent" in loads[0]["notes"].lower()
-    assert loads[0]["load_id"] == "L002"
+            # Act
+            result = prioritize_loads(loads)
 
-    # Confirm delivery_datetime ordering afterward
-    delivery_dates = [
-        datetime.fromisoformat(load["delivery_datetime"]) for load in loads
-    ]
-    assert delivery_dates == sorted(delivery_dates)
+            # Assert
+            assert result[0] == urgent_load  # Urgent load should be first
+            assert result[1] == regular_load
 
+    def test_prioritize_loads_by_delivery_date(self):
+        """Test prioritization by delivery date when urgency is same"""
+        # Arrange
+        later_load = Mock()
+        later_load.notes = "Regular delivery"
+        later_load.delivery_datetime = datetime(2025, 8, 15, 12, 0)
 
-def test_fallback_logic_when_strict_filters_fail(monkeypatch, mock_load_data):
-    """
-    When the strict query returns no matches, fallback should return relaxed matches.
-    """
+        earlier_load = Mock()
+        earlier_load.notes = "Standard delivery"
+        earlier_load.delivery_datetime = datetime(2025, 8, 10, 12, 0)
 
-    calls = []
+        loads = [later_load, earlier_load]
 
-    def mock_filter_loads_from_db(db, filters):
-        calls.append(1)
-        return [] if len(calls) == 1 else mock_load_data
+        with patch("app.core.config.constants") as mock_constants:
+            mock_constants.URGENT_KEYWORD = "urgent"
+            mock_constants.FALLBACK_DELIVERY_DATETIME = datetime(2099, 12, 31)
 
-    monkeypatch.setattr(
-        "app.api.v1.routes.load.filter_loads_from_db", mock_filter_loads_from_db
-    )
+            # Act
+            result = prioritize_loads(loads)
 
-    response = client.get(
-        "/api/v1/loads",
-        params={"origin": "Chicago", "pickup_datetime_from": "2025-08-10T00:00:00"},
-        headers=headers,
-    )
+            # Assert
+            assert result[0] == earlier_load  # Earlier delivery should be first
+            assert result[1] == later_load
 
-    assert response.status_code == 200
-    loads = response.json()
-    assert len(loads) == 3
-    assert "urgent" in loads[0]["notes"].lower()
+    def test_prioritize_loads_handles_none_notes(self):
+        """Test that loads with None notes are handled properly"""
+        # Arrange
+        load_with_none_notes = Mock()
+        load_with_none_notes.notes = None
+        load_with_none_notes.delivery_datetime = datetime(2025, 8, 10, 12, 0)
 
+        load_with_notes = Mock()
+        load_with_notes.notes = "Has notes"
+        load_with_notes.delivery_datetime = datetime(2025, 8, 11, 12, 0)
 
-def test_no_loads_returned_when_no_matches(monkeypatch):
-    """
-    When no loads match either strict or relaxed filters, API should return an empty list.
-    """
+        loads = [load_with_notes, load_with_none_notes]
 
-    def mock_filter_loads_from_db(db, filters):
-        return []
+        with patch("app.core.config.constants") as mock_constants:
+            mock_constants.URGENT_KEYWORD = "urgent"
+            mock_constants.FALLBACK_DELIVERY_DATETIME = datetime(2099, 12, 31)
 
-    monkeypatch.setattr(
-        "app.api.v1.routes.load.filter_loads_from_db", mock_filter_loads_from_db
-    )
+            # Act
+            result = prioritize_loads(loads)
 
-    response = client.get(
-        "/api/v1/loads",
-        params={"origin": "Nowhere"},
-        headers=headers,
-    )
-
-    assert response.status_code == 200
-    assert response.json() == []
+            # Assert
+            assert len(result) == 2
+            assert result[0] == load_with_none_notes  # Earlier delivery date
