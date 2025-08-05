@@ -95,7 +95,9 @@ def test_prioritized_loads_on_exact_match(monkeypatch, mock_load_data):
     assert loads[0]["load_id"] == "L002"
 
     # Confirm delivery_datetime ordering afterward
-    delivery_dates = [datetime.fromisoformat(l["delivery_datetime"]) for l in loads]
+    delivery_dates = [
+        datetime.fromisoformat(load["delivery_datetime"]) for load in loads
+    ]
     assert delivery_dates == sorted(delivery_dates)
 
 

@@ -1,13 +1,6 @@
 # Load Assistant API
 
-FastAPI-based load management system with carrier verification and call analytics.
-
-## 🚀 Quick Setup
-
-### Prerequisites
-- Python 3.12+ (using pyenv)
-- Poetry
-- Docker & Docker Compose
+A comprehensive FastAPI-based load management system with carrier verification, call analytics, and real-time dashboard. Built for freight brokers to manage loads, verify carriers through FMCSA integration, and track negotiation analytics.
 
 ## 🚀 Quick Start
 
@@ -16,52 +9,88 @@ FastAPI-based load management system with carrier verification and call analytic
 - Python 3.8+
 - Poetry
 - Docker & Docker Compose
-- ngrok (optional, for testing)
+- ngrok (optional, for testing webhooks)
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd load-agent-api
+git clone https://github.com/Laurafdez/Load-assistant
+cd load_assistant
 
 # Install dependencies
 make install
-
-# Install pre-commit hooks
-make pre-commit-install
 ```
 
 ### Environment Setup
 
-Create a `.env` file:
+Create a `.env` file based on `env.template`:
 
 ```env
 # API Authentication
-AUTH_HEADER_KEY=
-AUTH_API_KEY=
+AUTH_HEADER_KEY=X-API-Key
+AUTH_API_KEY=my-secret-api-key-123
 
 # External APIs
-FMCSA_API_KEY=
+FMCSA_API_KEY=your-fmcsa-api-key
 
 # CORS
-BACKEND_CORS_ORIGINS=
+BACKEND_CORS_ORIGINS=http://localhost:3000,http://localhost:8080
 
 # Project Config
-PROJECT_NAME=
-API_V1_STR=
-ENVIRONMENT=
-TESTING=
+PROJECT_NAME=Load Assistant API
+API_V1_STR=/api/v1
+ENVIRONMENT=development
+TESTING=false
 
 # Database
-DATABASE_URL=
+DATABASE_URL=postgresql://user:password@localhost:5432/loads_db
 
 # Server
-HOST=
-PORT=
+HOST=0.0.0.0
+PORT=8000
+```
+
+## 🐳 Docker Setup (Recommended)
+
+The application runs as a multi-container setup with PostgreSQL database and Streamlit dashboard.
+
+### Services Overview
+
+- **PostgreSQL Database** (`db`): Data persistence with automatic initialization
+- **FastAPI Application** (`api`): Main REST API service
+- **Streamlit Dashboard** (`dashboard`): Real-time analytics and metrics
+
+### Quick Start with Docker
+
+```bash
+# Start all services
+make dc-up
+
+# Access the services:
+# - API: http://localhost:8000
+# - Dashboard: http://localhost:8501
+# - Database: localhost:5432
+```
+
+### Docker Commands
+
+```bash
+# Full Stack Management
+make dc-up              # Start all services
+make dc-down            # Stop all services
+make dc-logs            # View logs from all services
+make dc-restart         # Restart with rebuild
+make dc-shell           # Access API container shell
+
+# Individual Container Management
+make docker-build       # Build API image only
+make docker-run         # Run API container only
 ```
 
 ## 🛠️ Development Commands
+
+### Local Development (without Docker)
 
 ```bash
 # Setup & Dependencies
@@ -70,179 +99,127 @@ make update               # Update dependencies
 make dev                  # Full dev setup (install + lint + test)
 
 # Code Quality
-make lint                 # Check code quality
-make lint-fix            # Auto-fix issues
-make test                # Run tests
+make lint                 # Check code quality with ruff
+make lint-fix            # Auto-fix linting issues
+make test                # Run pytest test suite
 make coverage           # Test with coverage report
 
 # Running Locally
 make run                # Start server (localhost:8000)
 make serve              # Alias for run
 
-# For Demo/Testing
+# For Demo/Testing with External Access
 make run-ngrok          # Start server + ngrok tunnel
 ```
 
-## 🐳 Docker Commands
 
+## 🌐 API Endpoints
+
+### Core Load Management
+- `GET /api/v1/health` - API health status
+- `GET /api/v1/loads` - List available loads with filtering
+- `POST /api/v1/loads/search` - Advanced load search
+
+### Call Analytics
+- `GET /api/v1/call-summary` - Retrieve all call summaries
+- `POST /api/v1/call-summary` - Log new call interactions
+
+### Carrier Management
+- `GET /api/v1/carriers/authorization/{mc_number}` - Verify carrier authorization via FMCSA
+
+### Negotiation System
+- `POST /api/v1/counteroffer` - Process carrier counteroffers with business rules
+
+### Metrics & Analytics
+- `GET /api/v1/metrics` - Dashboard metrics and KPIs
+
+### Authentication
+All protected endpoints require API key authentication:
 ```bash
-# Single Container
-make docker-build       # Build image
-make docker-run         # Run container
-
-# Docker Compose (Full Stack)
-make dc-up              # Start all services
-make dc-down            # Stop services
-make dc-logs            # View logs
-make dc-restart         # Restart with rebuild
-make dc-shell           # Access container shell
+curl -H "X-API-Key: my-secret-api-key-123" http://localhost:8000/api/v1/loads
 ```
 
-## 📡 Demo Setup with ngrok
+## 📊 Key Features
 
-For external access (perfect for webhooks and demos):
+### Load Management
+- Advanced search and filtering capabilities
+- Real-time load availability tracking
+- Geographic and route-based matching
 
-```bash
-# Terminal 1: Start the API with ngrok
-make run-ngrok
+### Carrier Verification
+- FMCSA MC number validation
+- Real-time authorization status checking
+- Carrier safety rating integration
 
-# This will:
-# 1. Start FastAPI server on localhost:8000
-# 2. Create ngrok tunnel
-# 3. Show public URL (e.g., https://abc123.ngrok.io)
-```
+### Call Analytics
+- Comprehensive call outcome tracking
+- Sentiment analysis and satisfaction metrics
+- Negotiation round counting and success rates
 
-Your API will be accessible at the ngrok URL for external services.
+### Intelligent Negotiations
+- Automated counteroffer processing
+- Business rule-based decision making
+- Multi-round negotiation support (up to 3 rounds)
+
+### Real-time Dashboard
+- Live metrics and KPIs visualization
+- Call success rate monitoring
+- Load distribution analytics
+- Carrier performance tracking
+
 
 ## 🏗️ Project Structure
 
 ```
 load_assistant/
 ├── app/
-│   ├── api/v1/routes/          # API endpoints
-│   │   ├── health.py           # Health checks
-│   │   ├── load.py            # Load management
-│   │   ├── call_summary.py    # Call analytics
-│   │   ├── metrics.py         # Dashboard metrics
-│   │   └── mock_fmcsa.py      # FMCSA integration
-│   ├── business/              # Business logic
+│   ├── api/                    # API layer
+│   │   ├── dependencies.py     # Dependency injection
+│   │   ├── main.py            # API router setup
+│   │   └── v1/routes/         # API endpoints
+│   │       ├── healthcheck.py # Health monitoring
+│   │       ├── load.py        # Load management
+│   │       ├── call_summary.py# Call analytics
+│   │       ├── metrics.py     # Dashboard metrics
+│   │       ├── carrier.py     # Carrier verification
+│   │       └── negotations.py # Negotiation logic
+│   ├── business/              # Business logic layer
+│   │   ├── healthcheck.py     # Health check logic
+│   │   ├── load.py           # Load business rules
+│   │   ├── metrics.py        # Metrics calculations
+│   │   └── negotiation.py    # Negotiation algorithms
 │   ├── crud/                  # Database operations
+│   │   ├── call_summary.py   # Call CRUD operations
+│   │   └── load.py           # Load CRUD operations
 │   ├── models/                # SQLAlchemy models
+│   │   ├── call_summary.py   # Call summary model
+│   │   └── load.py           # Load model
 │   ├── schemas/               # Pydantic schemas
-│   └── core/                  # Configuration
-├── tests/                     # Test suite
-├── docker-compose.yml         # Multi-container setup
-├── Dockerfile                 # Container definition
-└── init.sql                  # Database initialization
+│   │   ├── call_summary.py   # Call summary schemas
+│   │   ├── carrier.py        # Carrier schemas
+│   │   ├── load.py           # Load schemas
+│   │   ├── metrics.py        # Metrics schemas
+│   │   └── negotiations.py   # Negotiation schemas
+│   ├── core/                  # Core configuration
+│   │   └── config.py         # Application settings
+│   ├── database_engine/       # Database setup
+│   │   ├── base_class.py     # Base model class
+│   │   └── session.py        # Database session
+│   ├── middlewares/           # Custom middlewares
+│   │   └── api_log_request.py# Request logging
+│   └── utils/                 # Utility functions
+│       ├── normalization.py  # Data normalization
+│       └── parsing.py        # Data parsing helpers
+├── streamlit/                 # Dashboard application
+│   ├── dashboard.py          # Streamlit dashboard
+│   ├── Dockerfile           # Dashboard container
+│   └── requirements.txt     # Dashboard dependencies
+├── tests/                    # Test suite
+│   └── unit/
+│       └── test_loads.py    # Load endpoint tests
+├── docker-compose.yml       # Multi-container setup
+├── Dockerfile              # API container
+├── init.sql               # Database initialization
+├── Makefile              # Development commands
+└── pyproject.toml        # Poetry configuration
 ```
-
-## 🌐 API Endpoints
-
-### Core Routes
-- `GET /health` - Health check
-- `GET /api/v1/loads` - List loads
-- `POST /api/v1/loads/search` - Search loads
-- `POST /api/v1/call-summary` - Create call summary
-- `GET /api/v1/metrics` - Dashboard metrics
-- `POST /api/v1/verify-mc` - Verify MC number
-
-### Authentication
-All protected endpoints require:
-```bash
-curl -H "X-API-Key: my-secret-api-key-123" http://localhost:8000/api/v1/loads
-```
-
-## 📊 Features
-
-- **Load Management**: Search and manage freight loads
-- **Carrier Verification**: FMCSA MC number validation
-- **Call Analytics**: Track call outcomes and metrics
-- **Dashboard**: Real-time metrics and reporting
-- **Health Monitoring**: System health endpoints
-
-## 🧪 Testing
-
-```bash
-make test                   # Run all tests
-make coverage              # Run with coverage report
-poetry run pytest tests/unit/test_loads.py -v  # Run specific test
-```
-
-## 🔧 Python Environment
-
-```bash
-# Set Python version
-pyenv shell 3.12.0
-
-# Install dependencies
-make install
-
-# Check current version
-make version  # Shows: 1.0.0
-```
-
----
-
-**Quick Start Summary:**
-1. `pyenv shell 3.12.0`
-2. `make install`
-3. Create `.env` file
-4. `make run` or `make run-ngrok` for demo
-5. API available at `http://localhost:8000`ent
-
-### Deployment Steps
-
-1. **Build**: `make docker-build`
-2. **Push**: Push image to your registry
-3. **Deploy**: Use your cloud provider's deployment tools
-4. **Configure**: Set environment variables
-5. **Test**: Verify all endpoints are working
-
-## 📱 HappyRobot Integration
-
-### Webhook Configuration
-
-Configure your HappyRobot webhook to point to:
-```
-https://your-domain.com/api/v1/calls/webhook
-```
-
-### Call Flow
-
-1. Carrier calls the HappyRobot number
-2. AI assistant engages and collects MC number
-3. System verifies carrier with FMCSA API
-4. Load search and presentation
-5. Negotiation handling (up to 3 rounds)
-6. Call transfer or conclusion
-7. Analytics and reporting
-
-## 🧪 Testing
-
-### Running Tests
-
-```bash
-# Run all tests
-make test
-
-# Run with coverage
-make coverage
-
-```
-
-### Test Data
-
-The system includes test data for:
-- Sample loads
-- Mock carrier information
-- Test scenarios for negotiations
-
-## 📄 License
-
-This project is part of the FDE Technical Challenge.
-
-
-**Project Version**: 1.0.0  
-**Last Updated**: 2025  
-**Python Version**: 3.8+  
-**Framework**: FastAPI
