@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = []
+    FMCSA_URL: str
+    WEB_KEY: str
+
 
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     def parse_cors(cls, value):
