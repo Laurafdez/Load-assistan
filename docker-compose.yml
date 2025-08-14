@@ -24,8 +24,8 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     env_file:
       - .env
-    expose:
-      - "8000" # <-- cambiamos ports por expose para que solo sea accesible internamente
+    ports:
+      - "8000:8000"
     volumes:
       - .:/app
     working_dir: /app
@@ -39,29 +39,11 @@ services:
       dockerfile: Dockerfile 
     container_name: load_dashboard
     command: streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0
-    expose:
-      - "8501"
+    ports:
+      - "8501:8501"
     depends_on:
       - api
     volumes:
       - ./streamlit:/app
     working_dir: /app
 
-  caddy:
-    image: caddy:latest
-    container_name: caddy_proxy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - api
-      - dashboard
-
-volumes:
-  caddy_data:
-  caddy_config:

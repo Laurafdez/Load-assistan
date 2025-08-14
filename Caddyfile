@@ -1,9 +1,0 @@
-# API
-34-171-110-153.nip.io {
-    reverse_proxy api:8000
-}
-
-# Dashboard
-dashboard.34-171-110-153.nip.io {
-    reverse_proxy dashboard:8501
-}
